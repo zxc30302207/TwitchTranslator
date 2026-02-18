@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Twitch Chat AI Translator</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="popup">
+      <h1>聊天室 AI 翻譯</h1>
+
+      <label class="toggle-row" for="enabled">
+        <span>啟用即時翻譯</span>
+        <input id="enabled" type="checkbox" />
+      </label>
+
+      <label class="field" for="translationStyle">
+        <span>翻譯風格</span>
+        <select id="translationStyle">
+          <option value="natural_taiwan">自然台灣口語</option>
+          <option value="faithful">忠實但順句</option>
+        </select>
+      </label>
+
+      <p id="apiStatus" class="status"></p>
+
+      <details class="advanced" id="advancedPanel">
+        <summary>進階設定</summary>
+
+        <form id="settingsForm" class="advanced-form">
+          <label class="field" for="provider">
+            <span>翻譯模式</span>
+            <select id="provider">
+              <option value="google_free">免 API（直接可用）</option>
+              <option value="openai">OpenAI</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="groq">Groq</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="anthropic">Anthropic Claude</option>
+              <option value="ollama">Ollama（本機）</option>
+            </select>
+          </label>
+
+          <div id="providerFields">
+            <label class="field" for="apiKey">
+              <span id="apiKeyLabel">API Key</span>
+              <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+            </label>
+
+            <label class="field" for="apiUrl">
+              <span>API URL</span>
+              <input id="apiUrl" type="url" />
+            </label>
+
+            <label class="field" for="model">
+              <span>Model</span>
+              <input id="model" type="text" />
+            </label>
+
+            <label class="field" for="temperature">
+              <span>Temperature</span>
+              <input id="temperature" type="number" step="0.1" min="0" max="1" />
+            </label>
+          </div>
+
+          <label class="field" for="minChars">
+            <span>最小字數（過短略過）</span>
+            <input id="minChars" type="number" min="1" max="20" step="1" />
+          </label>
+
+          <div class="actions">
+            <button id="saveSettings" type="submit">儲存</button>
+            <button id="clearApiKey" type="button">清除 Key</button>
+          </div>
+
+          <p id="saveStatus" class="save-status"></p>
+        </form>
+      </details>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

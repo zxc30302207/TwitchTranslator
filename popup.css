@@ -1,0 +1,147 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 360px;
+  max-height: 640px;
+  overflow-y: auto;
+  font-family: "Noto Sans TC", "PingFang TC", sans-serif;
+  background: #101725;
+  color: #ecf2fb;
+}
+
+.popup {
+  padding: 14px;
+}
+
+h1 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  font-size: 12px;
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid #253044;
+  border-radius: 8px;
+  background: #0d1320;
+  color: #ecf2fb;
+  padding: 8px 10px;
+}
+
+.status {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  background: #0d1320;
+  color: #b8c7db;
+}
+
+.advanced {
+  margin-top: 10px;
+  border: 1px solid #253044;
+  border-radius: 10px;
+  background: #0d1320;
+  overflow: hidden;
+}
+
+.advanced > summary {
+  cursor: pointer;
+  user-select: none;
+  padding: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #d5e4f7;
+  list-style: none;
+}
+
+.advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.advanced > summary::after {
+  content: "▼";
+  float: right;
+  font-size: 10px;
+  opacity: 0.85;
+}
+
+.advanced[open] > summary::after {
+  content: "▲";
+}
+
+.advanced-form {
+  padding: 0 10px 10px;
+}
+
+#providerFields.is-hidden {
+  display: none;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+}
+
+button {
+  flex: 1;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#saveSettings {
+  background: #2a9d8f;
+  color: #07121a;
+}
+
+#clearApiKey {
+  background: #213049;
+  color: #e4edf8;
+}
+
+button:hover {
+  filter: brightness(1.08);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.save-status {
+  min-height: 16px;
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #89d0ff;
+}

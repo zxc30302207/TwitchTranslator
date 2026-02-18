@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Twitch Chat AI Translator 設定</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section class="card">
+        <h1>Twitch Chat AI Translator 設定</h1>
+        <p class="hint">
+          預設是免 API 翻譯模式。你也可以切換 OpenAI / OpenRouter / Groq / DeepSeek /
+          Gemini / Claude / Ollama。
+        </p>
+
+        <form id="settingsForm">
+          <label for="provider">
+            翻譯模式
+            <select id="provider">
+              <option value="google_free">免 API（直接可用）</option>
+              <option value="openai">OpenAI</option>
+              <option value="openrouter">OpenRouter</option>
+              <option value="groq">Groq</option>
+              <option value="deepseek">DeepSeek</option>
+              <option value="gemini">Google Gemini</option>
+              <option value="anthropic">Anthropic Claude</option>
+              <option value="ollama">Ollama（本機）</option>
+            </select>
+          </label>
+
+          <div id="providerFields">
+            <label for="apiKey">
+              <span id="apiKeyLabel">API Key</span>
+              <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+            </label>
+
+            <label for="apiUrl">
+              API URL
+              <input id="apiUrl" type="url" />
+            </label>
+
+            <label for="model">
+              Model
+              <input id="model" type="text" />
+            </label>
+
+            <label for="temperature">
+              Temperature
+              <input id="temperature" type="number" step="0.1" min="0" max="1" />
+            </label>
+
+            <label for="translationStyle">
+              翻譯風格
+              <select id="translationStyle">
+                <option value="natural_taiwan">自然台灣口語</option>
+                <option value="faithful">忠實但順句</option>
+              </select>
+            </label>
+          </div>
+
+          <label for="minChars">
+            最小字數（過短訊息略過）
+            <input id="minChars" type="number" min="1" max="20" step="1" />
+          </label>
+
+          <div class="actions">
+            <button type="submit" class="primary">儲存設定</button>
+            <button type="button" id="clearApiKey">清除 API Key</button>
+          </div>
+        </form>
+        <p id="saveStatus" class="status"></p>
+      </section>
+
+      <section class="card">
+        <h2>翻譯測試</h2>
+        <textarea id="testInput" rows="4" placeholder="輸入任一非中文聊天室訊息"></textarea>
+        <button id="testTranslate" class="primary" type="button">測試翻譯</button>
+        <pre id="testOutput"></pre>
+      </section>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

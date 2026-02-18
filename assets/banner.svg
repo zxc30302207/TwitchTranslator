@@ -1,0 +1,46 @@
+<svg width="1280" height="640" viewBox="0 0 1280 640" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="640" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220"/>
+      <stop offset="1" stop-color="#17233A"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="200" y1="120" x2="1060" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2AA198"/>
+      <stop offset="1" stop-color="#4F9BFF"/>
+    </linearGradient>
+    <filter id="blur" x="0" y="0" width="1280" height="640" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="42"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#bg)"/>
+
+  <g opacity="0.35" filter="url(#blur)">
+    <circle cx="255" cy="110" r="120" fill="#2AA198"/>
+    <circle cx="1005" cy="505" r="130" fill="#4F9BFF"/>
+    <circle cx="930" cy="130" r="85" fill="#7B8CFF"/>
+  </g>
+
+  <rect x="74" y="72" width="1132" height="496" rx="24" fill="#0D1424" stroke="#23324F"/>
+  <rect x="74" y="72" width="1132" height="8" rx="4" fill="url(#accent)"/>
+
+  <text x="118" y="186" fill="#EAF1FB" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="58" font-weight="700">
+    Twitch Chat AI Translator
+  </text>
+  <text x="118" y="242" fill="#AFC5DF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="28">
+    Real-time non-Chinese chat translation to Traditional Chinese
+  </text>
+
+  <rect x="118" y="288" width="188" height="44" rx="22" fill="#1C2A44" stroke="#2D3E61"/>
+  <text x="151" y="317" fill="#D8E8FF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="18" font-weight="600">Manifest v3</text>
+
+  <rect x="322" y="288" width="168" height="44" rx="22" fill="#1C2A44" stroke="#2D3E61"/>
+  <text x="360" y="317" fill="#D8E8FF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="18" font-weight="600">8 Providers</text>
+
+  <rect x="506" y="288" width="224" height="44" rx="22" fill="#1C2A44" stroke="#2D3E61"/>
+  <text x="546" y="317" fill="#D8E8FF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="18" font-weight="600">In-Popup Settings</text>
+
+  <rect x="118" y="380" width="1020" height="122" rx="16" fill="#0F1729" stroke="#2A3B5E"/>
+  <text x="154" y="434" fill="#8BC7FF" font-family="Consolas, Menlo, monospace" font-size="22">[中譯 en] 這場比賽太瘋狂了，最後一波超神</text>
+  <text x="154" y="472" fill="#97B0CC" font-family="Consolas, Menlo, monospace" font-size="20">[中譯 jp] 這招 timing 太漂亮，聊天室全在刷 W</text>
+</svg>
