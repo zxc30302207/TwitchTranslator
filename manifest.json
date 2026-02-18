@@ -2,14 +2,14 @@
   "manifest_version": 3,
   "name": "Twitch Chat AI Translator (繁中)",
   "description": "在 Twitch 直播聊天室把非中文訊息即時翻成自然繁體中文。",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "permissions": [
     "storage"
   ],
   "host_permissions": [
-    "*://twitch.tv/*",
-    "*://www.twitch.tv/*",
-    "*://m.twitch.tv/*",
+    "https://twitch.tv/*",
+    "https://www.twitch.tv/*",
+    "https://m.twitch.tv/*",
     "https://api.openai.com/*",
     "https://translate.googleapis.com/*",
     "https://openrouter.ai/*",
@@ -21,6 +21,9 @@
     "http://localhost/*",
     "https://localhost/*"
   ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; base-uri 'none'"
+  },
   "background": {
     "service_worker": "background.js"
   },
@@ -32,9 +35,9 @@
   "content_scripts": [
     {
       "matches": [
-        "*://twitch.tv/*",
-        "*://www.twitch.tv/*",
-        "*://m.twitch.tv/*"
+        "https://twitch.tv/*",
+        "https://www.twitch.tv/*",
+        "https://m.twitch.tv/*"
       ],
       "js": [
         "content.js"

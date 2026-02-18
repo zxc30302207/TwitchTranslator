@@ -5,7 +5,8 @@ const PROVIDER_PRESETS = Object.freeze({
     apiKeyLabel: "API Key（不需要）",
     apiKeyPlaceholder: "免填",
     defaultApiUrl: "",
-    defaultModel: ""
+    defaultModel: "",
+    endpointRule: null
   },
   openai: {
     label: "OpenAI",
@@ -13,7 +14,11 @@ const PROVIDER_PRESETS = Object.freeze({
     apiKeyLabel: "OpenAI API Key",
     apiKeyPlaceholder: "sk-...",
     defaultApiUrl: "https://api.openai.com/v1/chat/completions",
-    defaultModel: "gpt-4.1-mini"
+    defaultModel: "gpt-4.1-mini",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["api.openai.com"]
+    }
   },
   openrouter: {
     label: "OpenRouter",
@@ -21,7 +26,11 @@ const PROVIDER_PRESETS = Object.freeze({
     apiKeyLabel: "OpenRouter API Key",
     apiKeyPlaceholder: "sk-or-...",
     defaultApiUrl: "https://openrouter.ai/api/v1/chat/completions",
-    defaultModel: "openai/gpt-4o-mini"
+    defaultModel: "openai/gpt-4o-mini",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["openrouter.ai"]
+    }
   },
   groq: {
     label: "Groq",
@@ -29,7 +38,11 @@ const PROVIDER_PRESETS = Object.freeze({
     apiKeyLabel: "Groq API Key",
     apiKeyPlaceholder: "gsk_...",
     defaultApiUrl: "https://api.groq.com/openai/v1/chat/completions",
-    defaultModel: "llama-3.1-8b-instant"
+    defaultModel: "llama-3.1-8b-instant",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["api.groq.com"]
+    }
   },
   deepseek: {
     label: "DeepSeek",
@@ -37,7 +50,11 @@ const PROVIDER_PRESETS = Object.freeze({
     apiKeyLabel: "DeepSeek API Key",
     apiKeyPlaceholder: "sk-...",
     defaultApiUrl: "https://api.deepseek.com/chat/completions",
-    defaultModel: "deepseek-chat"
+    defaultModel: "deepseek-chat",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["api.deepseek.com"]
+    }
   },
   gemini: {
     label: "Google Gemini",
@@ -45,7 +62,11 @@ const PROVIDER_PRESETS = Object.freeze({
     apiKeyLabel: "Google AI API Key",
     apiKeyPlaceholder: "AIza...",
     defaultApiUrl: "https://generativelanguage.googleapis.com/v1beta",
-    defaultModel: "gemini-2.0-flash"
+    defaultModel: "gemini-2.0-flash",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["generativelanguage.googleapis.com"]
+    }
   },
   anthropic: {
     label: "Anthropic Claude",
@@ -53,7 +74,11 @@ const PROVIDER_PRESETS = Object.freeze({
     apiKeyLabel: "Anthropic API Key",
     apiKeyPlaceholder: "sk-ant-...",
     defaultApiUrl: "https://api.anthropic.com/v1/messages",
-    defaultModel: "claude-3-5-haiku-latest"
+    defaultModel: "claude-3-5-haiku-latest",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["api.anthropic.com"]
+    }
   },
   ollama: {
     label: "Ollama（本機）",
@@ -61,20 +86,32 @@ const PROVIDER_PRESETS = Object.freeze({
     apiKeyLabel: "API Key（通常不需要）",
     apiKeyPlaceholder: "可留空",
     defaultApiUrl: "http://127.0.0.1:11434/v1/chat/completions",
-    defaultModel: "qwen2.5:7b"
+    defaultModel: "qwen2.5:7b",
+    endpointRule: {
+      allowedProtocols: ["http:", "https:"],
+      allowedHosts: ["127.0.0.1", "localhost", "::1"]
+    }
   }
 });
 
-const DEFAULT_SETTINGS = {
+const DEFAULT_SYNC_SETTINGS = Object.freeze({
   enabled: true,
   provider: "google_free",
-  apiKey: "",
   apiUrl: "",
   model: "",
   temperature: 0.2,
   translationStyle: "natural_taiwan",
   minChars: 2
-};
+});
+
+const DEFAULT_LOCAL_SETTINGS = Object.freeze({
+  apiKey: ""
+});
+
+const TRANSLATION_STYLES = new Set(["natural_taiwan", "faithful"]);
+const MAX_MODEL_LENGTH = 120;
+const MAX_API_URL_LENGTH = 512;
+const MAX_API_KEY_LENGTH = 512;
 
 const enabledInput = document.getElementById("enabled");
 const styleSelect = document.getElementById("translationStyle");
@@ -103,7 +140,11 @@ enabledInput.addEventListener("change", async () => {
 });
 
 styleSelect.addEventListener("change", async () => {
-  await chrome.storage.sync.set({ translationStyle: styleSelect.value });
+  const translationStyle = TRANSLATION_STYLES.has(styleSelect.value)
+    ? styleSelect.value
+    : DEFAULT_SYNC_SETTINGS.translationStyle;
+  styleSelect.value = translationStyle;
+  await chrome.storage.sync.set({ translationStyle });
 });
 
 fields.provider.addEventListener("change", () => {
@@ -118,46 +159,83 @@ settingsForm.addEventListener("submit", async (event) => {
   if (!payload) {
     return;
   }
-  await chrome.storage.sync.set(payload);
+
+  await persistSettings(payload);
   renderSaveStatus(`已儲存 ${getProviderPreset(payload.provider).label} 設定。`, false);
   renderProviderStatus(payload);
 });
 
 clearApiKeyButton.addEventListener("click", async () => {
   fields.apiKey.value = "";
-  await chrome.storage.sync.set({ apiKey: "" });
+  await chrome.storage.local.set({ apiKey: "" });
+  await chrome.storage.sync.remove("apiKey");
   renderSaveStatus("API Key 已清除。", false);
   renderProviderStatus({ provider: normalizeProvider(fields.provider.value), apiKey: "" });
 });
 
 async function initialize() {
-  const settings = await chrome.storage.sync.get(DEFAULT_SETTINGS);
+  const [syncSettings, localSettings] = await Promise.all([
+    chrome.storage.sync.get(DEFAULT_SYNC_SETTINGS),
+    chrome.storage.local.get(DEFAULT_LOCAL_SETTINGS)
+  ]);
+
+  const settings = {
+    ...DEFAULT_SYNC_SETTINGS,
+    ...syncSettings,
+    apiKey: sanitizeApiKey(localSettings.apiKey)
+  };
+
   enabledInput.checked = Boolean(settings.enabled);
-  styleSelect.value = settings.translationStyle || DEFAULT_SETTINGS.translationStyle;
+
+  const translationStyle = TRANSLATION_STYLES.has(settings.translationStyle)
+    ? settings.translationStyle
+    : DEFAULT_SYNC_SETTINGS.translationStyle;
+  styleSelect.value = translationStyle;
 
   const provider = normalizeProvider(settings.provider);
   fields.provider.value = provider;
-  fields.apiKey.value = settings.apiKey || "";
-  fields.apiUrl.value = settings.apiUrl || "";
-  fields.model.value = settings.model || "";
-  fields.temperature.value = String(
-    Number.isFinite(Number(settings.temperature)) ? Number(settings.temperature) : 0.2
-  );
-  fields.minChars.value = String(Number(settings.minChars || 2));
+  fields.apiKey.value = settings.apiKey;
+  fields.apiUrl.value = sanitizeApiUrl(settings.apiUrl);
+  fields.model.value = sanitizeModel(settings.model);
+  fields.temperature.value = String(toNumberInRange(settings.temperature, 0, 1, 0.2));
+  fields.minChars.value = String(toIntegerInRange(settings.minChars, 1, 20, 2));
 
   updateProviderUi(provider, { overwriteWithPreset: false, applyDefaultsIfEmpty: true });
   renderProviderStatus(settings);
 }
 
+async function persistSettings(payload) {
+  const syncPayload = {
+    enabled: Boolean(enabledInput.checked),
+    provider: payload.provider,
+    apiUrl: payload.apiUrl,
+    model: payload.model,
+    temperature: payload.temperature,
+    translationStyle: payload.translationStyle,
+    minChars: payload.minChars
+  };
+
+  await Promise.all([
+    chrome.storage.sync.set(syncPayload),
+    chrome.storage.local.set({ apiKey: payload.apiKey }),
+    chrome.storage.sync.remove("apiKey")
+  ]);
+}
+
 function collectSettingsFromForm() {
   const provider = normalizeProvider(fields.provider.value);
   const preset = getProviderPreset(provider);
-  const minChars = Number(fields.minChars.value);
+  const minChars = toIntegerInRange(fields.minChars.value, 1, 20, NaN);
 
-  if (!Number.isInteger(minChars) || minChars < 1 || minChars > 20) {
+  if (!Number.isInteger(minChars)) {
     renderSaveStatus("最小字數必須是 1 到 20 的整數。", true);
     return null;
   }
+
+  const translationStyle = TRANSLATION_STYLES.has(styleSelect.value)
+    ? styleSelect.value
+    : DEFAULT_SYNC_SETTINGS.translationStyle;
+  styleSelect.value = translationStyle;
 
   if (provider === "google_free") {
     return {
@@ -165,30 +243,34 @@ function collectSettingsFromForm() {
       apiKey: "",
       apiUrl: "",
       model: "",
-      temperature: DEFAULT_SETTINGS.temperature,
-      translationStyle: styleSelect.value,
+      temperature: DEFAULT_SYNC_SETTINGS.temperature,
+      translationStyle,
       minChars
     };
   }
 
-  const apiKey = fields.apiKey.value.trim();
-  const apiUrl = fields.apiUrl.value.trim() || preset.defaultApiUrl;
-  const model = fields.model.value.trim() || preset.defaultModel;
-  const temperature = Number(fields.temperature.value);
+  const apiKey = sanitizeApiKey(fields.apiKey.value);
+  const apiUrl = sanitizeApiUrl(fields.apiUrl.value) || preset.defaultApiUrl;
+  const model = sanitizeModel(fields.model.value) || preset.defaultModel;
+  const temperature = toNumberInRange(fields.temperature.value, 0, 1, NaN);
 
   if (preset.needsApiKey && !apiKey) {
     renderSaveStatus(`${preset.label} 需要 API Key。`, true);
     return null;
   }
-  if (!apiUrl || !isHttpUrl(apiUrl)) {
-    renderSaveStatus("API URL 格式錯誤。", true);
+
+  const endpointValidation = validateProviderEndpoint(provider, apiUrl);
+  if (!endpointValidation.ok) {
+    renderSaveStatus(endpointValidation.error, true);
     return null;
   }
+
   if (!model) {
     renderSaveStatus("Model 不能空白。", true);
     return null;
   }
-  if (!Number.isFinite(temperature) || temperature < 0 || temperature > 1) {
+
+  if (!Number.isFinite(temperature)) {
     renderSaveStatus("Temperature 必須在 0 到 1 之間。", true);
     return null;
   }
@@ -196,10 +278,10 @@ function collectSettingsFromForm() {
   return {
     provider,
     apiKey,
-    apiUrl,
+    apiUrl: endpointValidation.url,
     model,
     temperature,
-    translationStyle: styleSelect.value,
+    translationStyle,
     minChars
   };
 }
@@ -222,14 +304,14 @@ function updateProviderUi(provider, options) {
     fields.model.value = preset.defaultModel;
   }
   if (!Number.isFinite(Number(fields.temperature.value))) {
-    fields.temperature.value = String(DEFAULT_SETTINGS.temperature);
+    fields.temperature.value = String(DEFAULT_SYNC_SETTINGS.temperature);
   }
 }
 
 function renderProviderStatus(settings) {
   const provider = normalizeProvider(settings.provider);
   const providerLabel = getProviderPreset(provider).label;
-  const hasApiKey = Boolean(String(settings.apiKey || "").trim());
+  const hasApiKey = Boolean(sanitizeApiKey(settings.apiKey));
 
   if (provider === "google_free") {
     apiStatus.textContent = "免 API 翻譯模式已啟用，可直接使用。";
@@ -241,7 +323,7 @@ function renderProviderStatus(settings) {
     return;
   }
 
-  apiStatus.textContent = `目前使用 ${providerLabel} 翻譯模式。`;
+  apiStatus.textContent = `目前使用 ${providerLabel} 翻譯模式（API Key 僅儲存在本機）。`;
 }
 
 function renderSaveStatus(message, isError) {
@@ -249,13 +331,62 @@ function renderSaveStatus(message, isError) {
   saveStatus.style.color = isError ? "#ff9da8" : "#89d0ff";
 }
 
-function isHttpUrl(value) {
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch (_error) {
-    return false;
+function validateProviderEndpoint(provider, value) {
+  const preset = getProviderPreset(provider);
+  if (!preset.endpointRule) {
+    return { ok: true, url: "" };
   }
+
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch (_error) {
+    return { ok: false, error: `${preset.label} API URL 格式錯誤。` };
+  }
+
+  const protocol = parsed.protocol.toLowerCase();
+  const hostname = parsed.hostname.toLowerCase();
+
+  if (!preset.endpointRule.allowedProtocols.includes(protocol)) {
+    return {
+      ok: false,
+      error: `${preset.label} 僅允許 ${preset.endpointRule.allowedProtocols.join(" / ")} 端點。`
+    };
+  }
+
+  if (!preset.endpointRule.allowedHosts.includes(hostname)) {
+    return { ok: false, error: `${preset.label} 僅允許官方端點或本機 localhost。` };
+  }
+
+  return { ok: true, url: parsed.toString() };
+}
+
+function sanitizeApiKey(value) {
+  return String(value || "").trim().slice(0, MAX_API_KEY_LENGTH);
+}
+
+function sanitizeApiUrl(value) {
+  return String(value || "").trim().slice(0, MAX_API_URL_LENGTH);
+}
+
+function sanitizeModel(value) {
+  return String(value || "").trim().slice(0, MAX_MODEL_LENGTH);
+}
+
+function toIntegerInRange(value, min, max, fallback) {
+  const normalized = Number(value);
+  if (!Number.isInteger(normalized)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, normalized));
+}
+
+function toNumberInRange(value, min, max, fallback) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, normalized));
 }
 
 function normalizeProvider(provider) {

@@ -116,6 +116,13 @@ button:hover {
   color: #89d0ff;
 }
 
+.security-note {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #9cb0c9;
+}
+
 #testOutput {
   margin: 12px 0 0;
   padding: 10px 12px;

@@ -7,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white" alt="Chrome Extension" />
   <img src="https://img.shields.io/badge/Manifest-v3-34A853" alt="Manifest v3" />
-  <img src="https://img.shields.io/badge/version-0.1.0-2ea44f" alt="Version 0.1.0" />
+  <img src="https://img.shields.io/badge/version-0.2.0-2ea44f" alt="Version 0.2.0" />
   <img src="https://img.shields.io/badge/providers-8-4F9BFF" alt="8 Providers" />
   <img src="https://img.shields.io/badge/status-active-2AA198" alt="Status Active" />
 </p>
@@ -20,6 +20,7 @@
 <p align="center">
   <a href="#quick-start-1-minute">Quick Start</a> ·
   <a href="#provider-support">Provider Support</a> ·
+  <a href="#security-notes">Security</a> ·
   <a href="#preview">Preview</a> ·
   <a href="#architecture">Architecture</a>
 </p>
@@ -66,25 +67,26 @@
 
 ## Provider Support
 
-| Provider | API Key | Default Endpoint | Default Model |
-| --- | --- | --- | --- |
-| `google_free` | No | Public translate endpoint | - |
-| `openai` | Yes | `https://api.openai.com/v1/chat/completions` | `gpt-4.1-mini` |
-| `openrouter` | Yes | `https://openrouter.ai/api/v1/chat/completions` | `openai/gpt-4o-mini` |
-| `groq` | Yes | `https://api.groq.com/openai/v1/chat/completions` | `llama-3.1-8b-instant` |
-| `deepseek` | Yes | `https://api.deepseek.com/chat/completions` | `deepseek-chat` |
-| `gemini` | Yes | `https://generativelanguage.googleapis.com/v1beta` | `gemini-2.0-flash` |
-| `anthropic` | Yes | `https://api.anthropic.com/v1/messages` | `claude-3-5-haiku-latest` |
-| `ollama` | Usually No | `http://127.0.0.1:11434/v1/chat/completions` | `qwen2.5:7b` |
+| Provider | API Key | Default Endpoint | Default Model | Endpoint Policy |
+| --- | --- | --- | --- | --- |
+| `google_free` | No | Public translate endpoint | - | N/A |
+| `openai` | Yes | `https://api.openai.com/v1/chat/completions` | `gpt-4.1-mini` | `https://api.openai.com` only |
+| `openrouter` | Yes | `https://openrouter.ai/api/v1/chat/completions` | `openai/gpt-4o-mini` | `https://openrouter.ai` only |
+| `groq` | Yes | `https://api.groq.com/openai/v1/chat/completions` | `llama-3.1-8b-instant` | `https://api.groq.com` only |
+| `deepseek` | Yes | `https://api.deepseek.com/chat/completions` | `deepseek-chat` | `https://api.deepseek.com` only |
+| `gemini` | Yes | `https://generativelanguage.googleapis.com/v1beta` | `gemini-2.0-flash` | `https://generativelanguage.googleapis.com` only |
+| `anthropic` | Yes | `https://api.anthropic.com/v1/messages` | `claude-3-5-haiku-latest` | `https://api.anthropic.com` only |
+| `ollama` | Usually No | `http://127.0.0.1:11434/v1/chat/completions` | `qwen2.5:7b` | localhost/127.0.0.1/::1 only |
 
 ---
 
 ## Runtime Behavior
 
-- 支援網域：`twitch.tv`、`www.twitch.tv`、`m.twitch.tv`
+- 支援網域：`https://twitch.tv`、`https://www.twitch.tv`、`https://m.twitch.tv`
 - 每則可翻譯訊息會在原文下方插入翻譯
 - 指令型訊息、過短訊息、雜訊會自動略過
 - 需要金鑰的 provider 未填 key 時，會回退到 `google_free`
+- 發送到 background 的翻譯訊息會做 sender + payload 驗證，不合法請求直接拒絕
 
 ---
 
@@ -111,9 +113,13 @@
 
 ## Security Notes
 
-- API keys 儲存在 `chrome.storage.sync`
-- 只對已授權 provider domain 發送請求
+- API Key 僅儲存在 `chrome.storage.local`（不走雲端同步）；舊版 `sync` key 會自動遷移並刪除
+- 僅允許 provider 白名單端點，且除 Ollama 外全部強制 `https`
+- 所有外部請求啟用 timeout 與 `AbortController`，並套用 `credentials: "omit"` / `referrerPolicy: "no-referrer"`
+- background 僅接受來自 extension 頁面與 Twitch `https` 頁面的訊息
+- 設定值（provider/url/model/style/minChars/temperature）會在背景與 UI 端雙重 sanitize
 - 若要正式商用，建議改為後端簽發短時 token，避免長期密鑰直接留在客戶端
+- 完整策略與回報方式請見：[`SECURITY.md`](SECURITY.md)
 
 ---
 

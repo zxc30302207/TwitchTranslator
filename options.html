@@ -33,7 +33,14 @@
           <div id="providerFields">
             <label for="apiKey">
               <span id="apiKeyLabel">API Key</span>
-              <input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+              <input
+                id="apiKey"
+                type="password"
+                placeholder="sk-..."
+                autocomplete="off"
+                autocapitalize="off"
+                spellcheck="false"
+              />
             </label>
 
             <label for="apiUrl">
@@ -43,7 +50,7 @@
 
             <label for="model">
               Model
-              <input id="model" type="text" />
+              <input id="model" type="text" autocapitalize="off" spellcheck="false" />
             </label>
 
             <label for="temperature">
@@ -71,6 +78,7 @@
           </div>
         </form>
         <p id="saveStatus" class="status"></p>
+        <p class="security-note">安全提示：API Key 僅儲存在本機（chrome.storage.local），不會同步到雲端。</p>
       </section>
 
       <section class="card">

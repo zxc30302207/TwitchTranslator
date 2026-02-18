@@ -4,63 +4,91 @@ const PROVIDER_CONFIG = Object.freeze({
     mode: "google_free",
     needsApiKey: false,
     defaultApiUrl: "",
-    defaultModel: ""
+    defaultModel: "",
+    endpointRule: null
   },
   openai: {
     label: "OpenAI",
     mode: "openai_compatible",
     needsApiKey: true,
     defaultApiUrl: "https://api.openai.com/v1/chat/completions",
-    defaultModel: "gpt-4.1-mini"
+    defaultModel: "gpt-4.1-mini",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["api.openai.com"]
+    }
   },
   openrouter: {
     label: "OpenRouter",
     mode: "openai_compatible",
     needsApiKey: true,
     defaultApiUrl: "https://openrouter.ai/api/v1/chat/completions",
-    defaultModel: "openai/gpt-4o-mini"
+    defaultModel: "openai/gpt-4o-mini",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["openrouter.ai"]
+    }
   },
   groq: {
     label: "Groq",
     mode: "openai_compatible",
     needsApiKey: true,
     defaultApiUrl: "https://api.groq.com/openai/v1/chat/completions",
-    defaultModel: "llama-3.1-8b-instant"
+    defaultModel: "llama-3.1-8b-instant",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["api.groq.com"]
+    }
   },
   deepseek: {
     label: "DeepSeek",
     mode: "openai_compatible",
     needsApiKey: true,
     defaultApiUrl: "https://api.deepseek.com/chat/completions",
-    defaultModel: "deepseek-chat"
+    defaultModel: "deepseek-chat",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["api.deepseek.com"]
+    }
   },
   gemini: {
     label: "Google Gemini",
     mode: "gemini",
     needsApiKey: true,
     defaultApiUrl: "https://generativelanguage.googleapis.com/v1beta",
-    defaultModel: "gemini-2.0-flash"
+    defaultModel: "gemini-2.0-flash",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["generativelanguage.googleapis.com"]
+    }
   },
   anthropic: {
     label: "Anthropic Claude",
     mode: "anthropic",
     needsApiKey: true,
     defaultApiUrl: "https://api.anthropic.com/v1/messages",
-    defaultModel: "claude-3-5-haiku-latest"
+    defaultModel: "claude-3-5-haiku-latest",
+    endpointRule: {
+      allowedProtocols: ["https:"],
+      allowedHosts: ["api.anthropic.com"]
+    }
   },
   ollama: {
     label: "Ollama (Local)",
     mode: "openai_compatible",
     needsApiKey: false,
     defaultApiUrl: "http://127.0.0.1:11434/v1/chat/completions",
-    defaultModel: "qwen2.5:7b"
+    defaultModel: "qwen2.5:7b",
+    endpointRule: {
+      allowedProtocols: ["http:", "https:"],
+      allowedHosts: ["127.0.0.1", "localhost", "::1"]
+    }
   }
 });
 
-const DEFAULT_SETTINGS = Object.freeze({
+const DEFAULT_PUBLIC_SETTINGS = Object.freeze({
   enabled: true,
   provider: "google_free",
-  apiKey: "",
   apiUrl: "",
   model: "",
   temperature: 0.2,
@@ -68,10 +96,29 @@ const DEFAULT_SETTINGS = Object.freeze({
   minChars: 2
 });
 
+const DEFAULT_SECRET_SETTINGS = Object.freeze({
+  apiKey: ""
+});
+
+const DEFAULT_SETTINGS = Object.freeze({
+  ...DEFAULT_PUBLIC_SETTINGS,
+  ...DEFAULT_SECRET_SETTINGS
+});
+
+const TRANSLATE_STYLE_SET = new Set(["natural_taiwan", "faithful"]);
+
 const MAX_CACHE_SIZE = 600;
 const MAX_CONCURRENT_REQUESTS = 4;
 const MAX_QUEUE_LENGTH = 80;
 const TRIMMED_QUEUE_LENGTH = 40;
+const MAX_INPUT_TEXT_LENGTH = 600;
+const MAX_TRANSLATED_TEXT_LENGTH = 1200;
+const MAX_CONTEXT_ITEMS = 6;
+const MAX_CONTEXT_ITEM_LENGTH = 240;
+const MAX_MODEL_LENGTH = 120;
+const MAX_API_URL_LENGTH = 512;
+const MAX_API_KEY_LENGTH = 512;
+const FETCH_TIMEOUT_MS = 15000;
 
 let settingsPromise = null;
 let settingsCache = { ...DEFAULT_SETTINGS };
@@ -87,22 +134,45 @@ chrome.runtime.onInstalled.addListener(() => {
 });
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "sync") {
+  if (areaName !== "sync" && areaName !== "local") {
     return;
   }
-  for (const [key, change] of Object.entries(changes)) {
-    settingsCache[key] = change.newValue;
+
+  const next = { ...settingsCache };
+  if (areaName === "sync") {
+    for (const [key, change] of Object.entries(changes)) {
+      if (key === "apiKey") {
+        continue;
+      }
+      next[key] = change.newValue;
+    }
   }
-  settingsCache.provider = normalizeProvider(settingsCache.provider);
+
+  if (areaName === "local" && changes.apiKey) {
+    next.apiKey = changes.apiKey.newValue;
+  }
+
+  settingsCache = sanitizeSettings(next);
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (!message || typeof message !== "object") {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!isAllowedSender(sender)) {
+    sendResponse({ ok: false, error: "未授權的訊息來源" });
+    return false;
+  }
+
+  if (!message || typeof message !== "object" || typeof message.type !== "string") {
     return false;
   }
 
   if (message.type === "TRANSLATE_TEXT") {
-    enqueueTask(() => processTranslateRequest(message))
+    const validatedMessage = validateTranslateMessage(message);
+    if (!validatedMessage.ok) {
+      sendResponse({ ok: false, error: validatedMessage.error });
+      return false;
+    }
+
+    enqueueTask(() => processTranslateRequest(validatedMessage.payload))
       .then((result) => sendResponse({ ok: true, ...result }))
       .catch((error) =>
         sendResponse({
@@ -129,18 +199,50 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 });
 
 function bootstrapSettings() {
-  settingsPromise = chrome.storage.sync
-    .get(DEFAULT_SETTINGS)
-    .then(async (stored) => {
-      settingsCache = applyProviderDefaults({ ...DEFAULT_SETTINGS, ...stored }, false);
-      await chrome.storage.sync.set(settingsCache);
-      return settingsCache;
-    })
-    .catch((error) => {
-      console.error("初始化設定失敗", error);
-      return settingsCache;
+  settingsPromise = (async () => {
+    await migrateLegacyApiKey();
+
+    const [publicStored, secretStored] = await Promise.all([
+      chrome.storage.sync.get(DEFAULT_PUBLIC_SETTINGS),
+      chrome.storage.local.get(DEFAULT_SECRET_SETTINGS)
+    ]);
+
+    settingsCache = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      ...publicStored,
+      ...secretStored
     });
+
+    await Promise.all([
+      chrome.storage.sync.set(toPublicSettings(settingsCache)),
+      chrome.storage.local.set(toSecretSettings(settingsCache))
+    ]);
+
+    return settingsCache;
+  })().catch((error) => {
+    console.error("初始化設定失敗", error);
+    settingsCache = sanitizeSettings(settingsCache);
+    return settingsCache;
+  });
+
   return settingsPromise;
+}
+
+async function migrateLegacyApiKey() {
+  const legacy = await chrome.storage.sync.get(["apiKey"]);
+  if (!Object.prototype.hasOwnProperty.call(legacy, "apiKey")) {
+    return;
+  }
+
+  const currentLocal = await chrome.storage.local.get(DEFAULT_SECRET_SETTINGS);
+  const legacyKey = sanitizeApiKey(legacy.apiKey);
+  const localKey = sanitizeApiKey(currentLocal.apiKey);
+
+  if (!localKey && legacyKey) {
+    await chrome.storage.local.set({ apiKey: legacyKey });
+  }
+
+  await chrome.storage.sync.remove("apiKey");
 }
 
 async function getSettings() {
@@ -149,6 +251,120 @@ async function getSettings() {
   }
   await settingsPromise;
   return settingsCache;
+}
+
+function toPublicSettings(settings) {
+  return {
+    enabled: Boolean(settings.enabled),
+    provider: normalizeProvider(settings.provider),
+    apiUrl: String(settings.apiUrl || ""),
+    model: String(settings.model || ""),
+    temperature: toNumberInRange(settings.temperature, 0, 1, DEFAULT_PUBLIC_SETTINGS.temperature),
+    translationStyle: normalizeTranslationStyle(settings.translationStyle),
+    minChars: toIntegerInRange(settings.minChars, 1, 20, DEFAULT_PUBLIC_SETTINGS.minChars)
+  };
+}
+
+function toSecretSettings(settings) {
+  return {
+    apiKey: sanitizeApiKey(settings.apiKey)
+  };
+}
+
+function sanitizeSettings(rawSettings) {
+  const provider = normalizeProvider(rawSettings.provider);
+  const providerConfig = getProviderConfig(provider);
+  const normalized = {
+    enabled: Boolean(rawSettings.enabled),
+    provider,
+    apiKey: sanitizeApiKey(rawSettings.apiKey),
+    apiUrl: sanitizeApiUrl(rawSettings.apiUrl),
+    model: sanitizeModel(rawSettings.model),
+    temperature: toNumberInRange(rawSettings.temperature, 0, 1, DEFAULT_PUBLIC_SETTINGS.temperature),
+    translationStyle: normalizeTranslationStyle(rawSettings.translationStyle),
+    minChars: toIntegerInRange(rawSettings.minChars, 1, 20, DEFAULT_PUBLIC_SETTINGS.minChars)
+  };
+
+  if (providerConfig.mode === "google_free") {
+    normalized.apiKey = "";
+    normalized.apiUrl = "";
+    normalized.model = "";
+    normalized.temperature = DEFAULT_PUBLIC_SETTINGS.temperature;
+    return normalized;
+  }
+
+  if (!normalized.apiUrl) {
+    normalized.apiUrl = providerConfig.defaultApiUrl;
+  }
+
+  const endpointValidation = validateProviderEndpoint(provider, normalized.apiUrl);
+  normalized.apiUrl = endpointValidation.ok ? endpointValidation.url : providerConfig.defaultApiUrl;
+
+  if (!normalized.model) {
+    normalized.model = providerConfig.defaultModel;
+  }
+
+  return normalized;
+}
+
+function validateTranslateMessage(message) {
+  const text = normalizeText(message.text).slice(0, MAX_INPUT_TEXT_LENGTH);
+  if (!text) {
+    return { ok: false, error: "翻譯文字不可為空" };
+  }
+
+  const context = Array.isArray(message.context)
+    ? message.context
+        .slice(-MAX_CONTEXT_ITEMS)
+        .map((line) => normalizeText(line).slice(0, MAX_CONTEXT_ITEM_LENGTH))
+        .filter(Boolean)
+    : [];
+
+  return {
+    ok: true,
+    payload: {
+      text,
+      context
+    }
+  };
+}
+
+function isAllowedSender(sender) {
+  if (!sender) {
+    return false;
+  }
+
+  if (typeof sender.id === "string" && sender.id !== chrome.runtime.id) {
+    return false;
+  }
+
+  const rawUrl =
+    (typeof sender.url === "string" && sender.url) ||
+    (typeof sender.origin === "string" && sender.origin) ||
+    (typeof sender.documentUrl === "string" && sender.documentUrl) ||
+    (typeof sender.tab?.url === "string" && sender.tab.url) ||
+    "";
+  if (!rawUrl) {
+    return Boolean(sender.id === chrome.runtime.id);
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(rawUrl);
+  } catch (_error) {
+    return false;
+  }
+
+  if (parsed.protocol === "chrome-extension:") {
+    return parsed.host === chrome.runtime.id;
+  }
+
+  if (parsed.protocol !== "https:") {
+    return false;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  return hostname === "twitch.tv" || hostname === "www.twitch.tv" || hostname === "m.twitch.tv";
 }
 
 function enqueueTask(task) {
@@ -163,6 +379,7 @@ function trimQueueIfNeeded() {
   if (requestQueue.length <= MAX_QUEUE_LENGTH) {
     return;
   }
+
   const dropCount = requestQueue.length - TRIMMED_QUEUE_LENGTH;
   const dropped = requestQueue.splice(0, dropCount);
   for (const item of dropped) {
@@ -186,31 +403,24 @@ function drainQueue() {
   }
 }
 
-async function processTranslateRequest(message) {
+async function processTranslateRequest(request) {
   const settings = await getSettings();
   if (!settings.enabled) {
     return { skip: true, reason: "disabled" };
   }
 
-  const normalizedText = normalizeText(message.text);
+  const normalizedText = normalizeText(request.text).slice(0, MAX_INPUT_TEXT_LENGTH);
   if (!normalizedText) {
     return { skip: true, reason: "empty_text" };
   }
-  if (normalizedText.length < Number(settings.minChars || 2)) {
+  if (normalizedText.length < Number(settings.minChars || DEFAULT_PUBLIC_SETTINGS.minChars)) {
     return { skip: true, reason: "too_short" };
   }
   if (shouldSkipTranslation(normalizedText)) {
     return { skip: true, reason: "not_translatable" };
   }
 
-  const normalizedSettings = applyProviderDefaults(
-    {
-      ...settings,
-      provider: normalizeProvider(settings.provider)
-    },
-    false
-  );
-
+  const normalizedSettings = sanitizeSettings(settings);
   const cacheKey = buildCacheKey(normalizedSettings, normalizedText);
   const cached = readCache(cacheKey);
   if (cached) {
@@ -223,8 +433,11 @@ async function processTranslateRequest(message) {
   }
 
   const pendingPromise = (async () => {
-    const context = Array.isArray(message.context)
-      ? message.context.slice(-6).map((item) => normalizeText(item)).filter(Boolean)
+    const context = Array.isArray(request.context)
+      ? request.context
+          .slice(-MAX_CONTEXT_ITEMS)
+          .map((line) => normalizeText(line).slice(0, MAX_CONTEXT_ITEM_LENGTH))
+          .filter(Boolean)
       : [];
 
     const rawResult = await requestTranslation({
@@ -233,7 +446,7 @@ async function processTranslateRequest(message) {
       settings: normalizedSettings
     });
 
-    const translated = normalizeText(rawResult.translated);
+    const translated = normalizeText(rawResult.translated).slice(0, MAX_TRANSLATED_TEXT_LENGTH);
     if (!translated || translated === normalizedText || !rawResult.shouldTranslate) {
       return {
         skip: true,
@@ -247,6 +460,7 @@ async function processTranslateRequest(message) {
       translated,
       detectedLanguage: rawResult.detectedLanguage
     };
+
     writeCache(cacheKey, result);
     return result;
   })();
@@ -264,11 +478,12 @@ function buildCacheKey(settings, text) {
   if (providerConfig.mode === "google_free") {
     return [settings.provider, text].join("::");
   }
+
   return [
     settings.provider,
     getEffectiveApiUrl(settings),
     getEffectiveModel(settings),
-    String(settings.translationStyle || "natural_taiwan"),
+    String(settings.translationStyle || DEFAULT_PUBLIC_SETTINGS.translationStyle),
     text
   ].join("::");
 }
@@ -303,13 +518,9 @@ async function requestTranslationFromGoogle(text) {
     "https://translate.googleapis.com/translate_a/single" +
     `?client=gtx&sl=auto&tl=zh-TW&dt=t&q=${encodeURIComponent(text)}`;
 
-  const response = await fetch(url, { method: "GET" });
-  let responseBody = null;
-  try {
-    responseBody = await response.json();
-  } catch (_error) {
-    responseBody = null;
-  }
+  const { response, responseBody } = await fetchJsonWithTimeout(url, {
+    method: "GET"
+  }, "免 API 翻譯");
 
   if (!response.ok) {
     throw new Error(formatGoogleError(response.status));
@@ -328,13 +539,20 @@ async function requestTranslationFromOpenAiCompatible({ text, context, settings,
     throw new Error(`${providerConfig.label} Model 未設定`);
   }
 
+  const endpointValidation = validateProviderEndpoint(settings.provider, apiUrl);
+  if (!endpointValidation.ok) {
+    throw new Error(endpointValidation.error);
+  }
+
   const headers = {
     "Content-Type": "application/json"
   };
+
   const apiKey = String(settings.apiKey || "").trim();
   if (apiKey) {
     headers.Authorization = `Bearer ${apiKey}`;
   }
+
   if (settings.provider === "openrouter") {
     headers["HTTP-Referer"] = "https://twitch.tv";
     headers["X-Title"] = "Twitch Chat AI Translator";
@@ -342,7 +560,7 @@ async function requestTranslationFromOpenAiCompatible({ text, context, settings,
 
   const payload = {
     model,
-    temperature: Number(settings.temperature ?? 0.2),
+    temperature: toNumberInRange(settings.temperature, 0, 1, DEFAULT_PUBLIC_SETTINGS.temperature),
     messages: [
       {
         role: "system",
@@ -355,18 +573,11 @@ async function requestTranslationFromOpenAiCompatible({ text, context, settings,
     ]
   };
 
-  const response = await fetch(apiUrl, {
+  const { response, responseBody } = await fetchJsonWithTimeout(endpointValidation.url, {
     method: "POST",
     headers,
     body: JSON.stringify(payload)
-  });
-
-  let responseBody = null;
-  try {
-    responseBody = await response.json();
-  } catch (_error) {
-    responseBody = null;
-  }
+  }, providerConfig.label);
 
   if (!response.ok) {
     throw new Error(formatProviderError(response.status, responseBody, providerConfig));
@@ -381,11 +592,11 @@ async function requestTranslationFromOpenAiCompatible({ text, context, settings,
 }
 
 async function requestTranslationFromGemini({ text, context, settings, providerConfig }) {
-  const apiUrl = buildGeminiEndpoint(getEffectiveApiUrl(settings), getEffectiveModel(settings));
+  const baseUrl = getEffectiveApiUrl(settings);
   const model = getEffectiveModel(settings);
   const apiKey = String(settings.apiKey || "").trim();
 
-  if (!apiUrl) {
+  if (!baseUrl) {
     throw new Error("Gemini API URL 未設定");
   }
   if (!model) {
@@ -395,7 +606,17 @@ async function requestTranslationFromGemini({ text, context, settings, providerC
     throw new Error("Gemini API Key 未設定");
   }
 
-  const endpoint = `${apiUrl}${apiUrl.includes("?") ? "&" : "?"}key=${encodeURIComponent(apiKey)}`;
+  const endpointValidation = validateProviderEndpoint(settings.provider, baseUrl);
+  if (!endpointValidation.ok) {
+    throw new Error(endpointValidation.error);
+  }
+
+  const endpoint = buildGeminiEndpoint(endpointValidation.url, model);
+  if (!endpoint) {
+    throw new Error("Gemini API URL 格式錯誤");
+  }
+
+  const fullUrl = `${endpoint}${endpoint.includes("?") ? "&" : "?"}key=${encodeURIComponent(apiKey)}`;
   const payload = {
     systemInstruction: {
       parts: [{ text: buildSystemPrompt(settings.translationStyle) }]
@@ -407,25 +628,18 @@ async function requestTranslationFromGemini({ text, context, settings, providerC
       }
     ],
     generationConfig: {
-      temperature: Number(settings.temperature ?? 0.2),
+      temperature: toNumberInRange(settings.temperature, 0, 1, DEFAULT_PUBLIC_SETTINGS.temperature),
       responseMimeType: "application/json"
     }
   };
 
-  const response = await fetch(endpoint, {
+  const { response, responseBody } = await fetchJsonWithTimeout(fullUrl, {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
     body: JSON.stringify(payload)
-  });
-
-  let responseBody = null;
-  try {
-    responseBody = await response.json();
-  } catch (_error) {
-    responseBody = null;
-  }
+  }, providerConfig.label);
 
   if (!response.ok) {
     throw new Error(formatProviderError(response.status, responseBody, providerConfig));
@@ -454,10 +668,15 @@ async function requestTranslationFromAnthropic({ text, context, settings, provid
     throw new Error("Anthropic API Key 未設定");
   }
 
+  const endpointValidation = validateProviderEndpoint(settings.provider, apiUrl);
+  if (!endpointValidation.ok) {
+    throw new Error(endpointValidation.error);
+  }
+
   const payload = {
     model,
     max_tokens: 220,
-    temperature: Number(settings.temperature ?? 0.2),
+    temperature: toNumberInRange(settings.temperature, 0, 1, DEFAULT_PUBLIC_SETTINGS.temperature),
     system: buildSystemPrompt(settings.translationStyle),
     messages: [
       {
@@ -467,7 +686,7 @@ async function requestTranslationFromAnthropic({ text, context, settings, provid
     ]
   };
 
-  const response = await fetch(apiUrl, {
+  const { response, responseBody } = await fetchJsonWithTimeout(endpointValidation.url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -475,14 +694,7 @@ async function requestTranslationFromAnthropic({ text, context, settings, provid
       "anthropic-version": "2023-06-01"
     },
     body: JSON.stringify(payload)
-  });
-
-  let responseBody = null;
-  try {
-    responseBody = await response.json();
-  } catch (_error) {
-    responseBody = null;
-  }
+  }, providerConfig.label);
 
   if (!response.ok) {
     throw new Error(formatProviderError(response.status, responseBody, providerConfig));
@@ -494,6 +706,74 @@ async function requestTranslationFromAnthropic({ text, context, settings, provid
   }
 
   return parseModelOutput(content, text);
+}
+
+async function fetchJsonWithTimeout(url, options, providerLabel) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      credentials: "omit",
+      cache: "no-store",
+      referrerPolicy: "no-referrer"
+    });
+
+    let responseBody = null;
+    try {
+      responseBody = await response.json();
+    } catch (_error) {
+      responseBody = null;
+    }
+
+    return { response, responseBody };
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw new Error(`${providerLabel} 連線逾時，請稍後再試`);
+    }
+    if (error instanceof TypeError) {
+      throw new Error(`${providerLabel} 連線失敗，請檢查網路或端點設定`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function validateProviderEndpoint(provider, apiUrl) {
+  const config = getProviderConfig(provider);
+  if (!config.endpointRule) {
+    return { ok: true, url: "" };
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(apiUrl);
+  } catch (_error) {
+    return { ok: false, error: `${config.label} API URL 格式錯誤` };
+  }
+
+  const protocol = parsed.protocol.toLowerCase();
+  const hostname = parsed.hostname.toLowerCase();
+  const rule = config.endpointRule;
+
+  if (!rule.allowedProtocols.includes(protocol)) {
+    return {
+      ok: false,
+      error: `${config.label} 僅允許 ${rule.allowedProtocols.join(" / ")} 端點`
+    };
+  }
+
+  if (!rule.allowedHosts.includes(hostname)) {
+    return {
+      ok: false,
+      error: `${config.label} 僅允許官方端點或本機 localhost`
+    };
+  }
+
+  return { ok: true, url: parsed.toString() };
 }
 
 function parseGoogleResponse(payload, originalText) {
@@ -528,12 +808,14 @@ function extractOpenAiCompatibleContent(responseBody) {
   if (typeof content === "string") {
     return content.trim();
   }
+
   if (Array.isArray(content)) {
     return content
       .map((part) => (part && typeof part.text === "string" ? part.text : ""))
       .join("\n")
       .trim();
   }
+
   return "";
 }
 
@@ -571,8 +853,7 @@ function buildGeminiEndpoint(apiUrl, model) {
     return trimmedApiUrl;
   }
 
-  const separator = trimmedApiUrl.endsWith("/v1") || trimmedApiUrl.endsWith("/v1beta") ? "" : "";
-  return `${trimmedApiUrl}${separator}/models/${encodeURIComponent(model)}:generateContent`;
+  return `${trimmedApiUrl}/models/${encodeURIComponent(model)}:generateContent`;
 }
 
 function buildSystemPrompt(style) {
@@ -598,6 +879,7 @@ function buildUserPrompt(text, context) {
   if (!context.length) {
     return `請翻譯以下訊息：\n${text}`;
   }
+
   return [
     "以下是最近聊天室上下文（僅供語氣理解）：",
     ...context.map((line) => `- ${line}`),
@@ -607,11 +889,11 @@ function buildUserPrompt(text, context) {
   ].join("\n");
 }
 
-function parseModelOutput(raw, originalText) {
+function parseModelOutput(rawValue, originalText) {
+  const raw = String(rawValue || "");
   const parsed = tryParseJson(raw);
   if (parsed) {
-    const translated =
-      typeof parsed.translated === "string" ? parsed.translated.trim() : "";
+    const translated = typeof parsed.translated === "string" ? parsed.translated.trim() : "";
     const detectedLanguage =
       typeof parsed.detected_language === "string" && parsed.detected_language.trim()
         ? parsed.detected_language.trim()
@@ -666,7 +948,8 @@ function formatGoogleError(status) {
 
 function formatProviderError(status, body, providerConfig) {
   const detail =
-    (body && typeof body === "object" &&
+    (body &&
+      typeof body === "object" &&
       (readNestedMessage(body, ["error", "message"]) ||
         readNestedMessage(body, ["error", "details"]) ||
         readNestedMessage(body, ["message"]))) ||
@@ -695,10 +978,7 @@ function readNestedMessage(obj, path) {
     }
     current = current[key];
   }
-  if (typeof current === "string") {
-    return current;
-  }
-  return "";
+  return typeof current === "string" ? current : "";
 }
 
 function normalizeText(text) {
@@ -708,6 +988,38 @@ function normalizeText(text) {
   return text.replace(/\s+/g, " ").trim();
 }
 
+function sanitizeApiKey(value) {
+  return String(value || "").trim().slice(0, MAX_API_KEY_LENGTH);
+}
+
+function sanitizeApiUrl(value) {
+  return String(value || "").trim().slice(0, MAX_API_URL_LENGTH);
+}
+
+function sanitizeModel(value) {
+  return String(value || "").trim().slice(0, MAX_MODEL_LENGTH);
+}
+
+function normalizeTranslationStyle(style) {
+  return TRANSLATE_STYLE_SET.has(style) ? style : DEFAULT_PUBLIC_SETTINGS.translationStyle;
+}
+
+function toIntegerInRange(value, min, max, fallback) {
+  const normalized = Number(value);
+  if (!Number.isInteger(normalized)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, normalized));
+}
+
+function toNumberInRange(value, min, max, fallback) {
+  const normalized = Number(value);
+  if (!Number.isFinite(normalized)) {
+    return fallback;
+  }
+  return Math.min(max, Math.max(min, normalized));
+}
+
 function shouldSkipTranslation(text) {
   if (text.startsWith("/")) {
     return true;
@@ -715,6 +1027,7 @@ function shouldSkipTranslation(text) {
   if (/^(https?:\/\/|www\.)\S+$/i.test(text)) {
     return true;
   }
+
   const compact = text.replace(/\s+/g, "");
   return compact.length > 0 && !/[\p{L}\p{N}]/u.test(compact);
 }
@@ -727,9 +1040,7 @@ function isChineseLanguageCode(languageCode) {
 }
 
 function normalizeProvider(provider) {
-  return Object.prototype.hasOwnProperty.call(PROVIDER_CONFIG, provider)
-    ? provider
-    : "google_free";
+  return Object.prototype.hasOwnProperty.call(PROVIDER_CONFIG, provider) ? provider : "google_free";
 }
 
 function getProviderConfig(provider) {
@@ -738,38 +1049,26 @@ function getProviderConfig(provider) {
 
 function getEffectiveApiUrl(settings) {
   const config = getProviderConfig(settings.provider);
-  const apiUrl = String(settings.apiUrl || "").trim();
-  return apiUrl || config.defaultApiUrl;
+  const apiUrl = sanitizeApiUrl(settings.apiUrl);
+  if (!apiUrl) {
+    return config.defaultApiUrl;
+  }
+
+  const endpointValidation = validateProviderEndpoint(settings.provider, apiUrl);
+  return endpointValidation.ok ? endpointValidation.url : config.defaultApiUrl;
 }
 
 function getEffectiveModel(settings) {
   const config = getProviderConfig(settings.provider);
-  const model = String(settings.model || "").trim();
+  const model = sanitizeModel(settings.model);
   return model || config.defaultModel;
-}
-
-function applyProviderDefaults(settings, force) {
-  const normalizedProvider = normalizeProvider(settings.provider);
-  const providerConfig = getProviderConfig(normalizedProvider);
-  const next = {
-    ...settings,
-    provider: normalizedProvider
-  };
-
-  if (force || !String(next.apiUrl || "").trim()) {
-    next.apiUrl = providerConfig.defaultApiUrl;
-  }
-  if (force || !String(next.model || "").trim()) {
-    next.model = providerConfig.defaultModel;
-  }
-
-  return next;
 }
 
 function readCache(key) {
   if (!translationCache.has(key)) {
     return null;
   }
+
   const value = translationCache.get(key);
   translationCache.delete(key);
   translationCache.set(key, value);
@@ -780,6 +1079,7 @@ function writeCache(key, value) {
   if (translationCache.has(key)) {
     translationCache.delete(key);
   }
+
   translationCache.set(key, value);
   if (translationCache.size > MAX_CACHE_SIZE) {
     const oldestKey = translationCache.keys().next().value;

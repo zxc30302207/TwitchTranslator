@@ -145,3 +145,10 @@ button:disabled {
   font-size: 12px;
   color: #89d0ff;
 }
+
+.security-note {
+  margin: 8px 0 0;
+  font-size: 11px;
+  line-height: 1.45;
+  color: #92a8c2;
+}
