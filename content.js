@@ -21,6 +21,7 @@
 
   const pendingNodes = new Set();
   let flushScheduled = false;
+  let runtimeAvailable = true;
 
   injectStyle();
   loadSettings().then(startObserver).catch(startObserver);
@@ -123,22 +124,71 @@
     const context = state.recentMessages.slice(-6);
     rememberMessage(text);
 
-    chrome.runtime.sendMessage(
+    safeSendRuntimeMessage(
       {
         type: "TRANSLATE_TEXT",
         text,
         context
       },
       (response) => {
-        if (chrome.runtime.lastError) {
-          return;
-        }
         if (!response || !response.ok || response.skip || !response.translated) {
           return;
         }
         appendTranslation(line, response.translated, response.detectedLanguage);
       }
     );
+  }
+
+  function safeSendRuntimeMessage(message, onResponse) {
+    if (!canUseRuntime()) {
+      return;
+    }
+
+    try {
+      chrome.runtime.sendMessage(message, (response) => {
+        const runtimeError = chrome.runtime?.lastError;
+        if (runtimeError) {
+          if (isExtensionContextInvalidated(runtimeError.message)) {
+            disableRuntimeMessaging();
+          }
+          return;
+        }
+
+        onResponse(response);
+      });
+    } catch (error) {
+      if (isExtensionContextInvalidated(error)) {
+        disableRuntimeMessaging();
+      }
+    }
+  }
+
+  function canUseRuntime() {
+    if (!runtimeAvailable) {
+      return false;
+    }
+
+    try {
+      return Boolean(chrome?.runtime?.id);
+    } catch (_error) {
+      return false;
+    }
+  }
+
+  function disableRuntimeMessaging() {
+    runtimeAvailable = false;
+    state.enabled = false;
+    pendingNodes.clear();
+  }
+
+  function isExtensionContextInvalidated(errorLike) {
+    const message =
+      typeof errorLike === "string"
+        ? errorLike
+        : errorLike instanceof Error
+          ? errorLike.message
+          : String(errorLike || "");
+    return /Extension context invalidated/i.test(message);
   }
 
   function appendTranslation(line, translatedText, detectedLanguage) {
