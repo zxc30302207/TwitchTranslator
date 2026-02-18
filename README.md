@@ -7,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/Chrome-Extension-4285F4?logo=googlechrome&logoColor=white" alt="Chrome Extension" />
   <img src="https://img.shields.io/badge/Manifest-v3-34A853" alt="Manifest v3" />
-  <img src="https://img.shields.io/badge/version-0.2.0-2ea44f" alt="Version 0.2.0" />
+  <img src="https://img.shields.io/badge/version-2.0-2ea44f" alt="Version 2.0" />
   <img src="https://img.shields.io/badge/providers-8-4F9BFF" alt="8 Providers" />
   <img src="https://img.shields.io/badge/status-active-2AA198" alt="Status Active" />
 </p>

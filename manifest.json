@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Twitch Chat AI Translator (繁中)",
   "description": "在 Twitch 直播聊天室把非中文訊息即時翻成自然繁體中文。",
-  "version": "0.2.0",
+  "version": "2.0",
   "permissions": [
     "storage"
   ],
