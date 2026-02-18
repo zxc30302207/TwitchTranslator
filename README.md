@@ -12,30 +12,55 @@
   <img src="https://img.shields.io/badge/status-active-2AA198" alt="Status Active" />
 </p>
 
-A high-performance Chrome extension for **real-time Twitch chat translation** into **Traditional Chinese (繁體中文)**.
+<p align="center">
+  把 Twitch 聊天室中的非中文訊息，即時翻成自然繁體中文。<br/>
+  針對高速聊天室設計：並行翻譯、去重、快取、爆量保護。
+</p>
 
-> Built for live chat speed, flexible provider routing, and readable Taiwan-style output.
-
----
-
-## Highlights
-
-- Real-time translation for non-Chinese Twitch chat messages
-- Taiwan-style Traditional Chinese output with natural tone options
-- Built-in multi-provider routing
-- No-key mode available out of the box (`google_free`)
-- In-popup advanced settings (no separate settings page required)
-- Queue concurrency, in-flight deduplication, and LRU-style cache for live stream traffic
+<p align="center">
+  <a href="#quick-start-1-minute">Quick Start</a> ·
+  <a href="#provider-support">Provider Support</a> ·
+  <a href="#preview">Preview</a> ·
+  <a href="#architecture">Architecture</a>
+</p>
 
 ---
 
-## Screenshots
+## Why This Project
+
+| Value | What You Get |
+| --- | --- |
+| 即時體驗 | 直播聊天室可用，訊息不是晚一大段才翻譯 |
+| 可切換供應商 | 免 API / OpenAI / OpenRouter / Groq / DeepSeek / Gemini / Claude / Ollama |
+| 設定集中 | 進階設定已整合在 popup，不需要跳轉額外設定頁 |
+| 易讀輸出 | 以繁體中文聊天室語感為目標，避免生硬字面翻譯 |
+
+---
+
+## Preview
 
 ### Popup Advanced Settings
 
 <p>
   <img src="assets/popup-preview.svg" alt="Popup advanced settings preview" width="100%" />
 </p>
+
+### Runtime Architecture
+
+<p>
+  <img src="assets/architecture.svg" alt="Runtime architecture flow" width="100%" />
+</p>
+
+---
+
+## Quick Start (1 Minute)
+
+1. 打開 Chrome：`chrome://extensions`
+2. 開啟 **Developer mode**
+3. 點 **Load unpacked**
+4. 選擇專案資料夾：`/home/zxc30302207/code/codex-workspace/TWITCH`
+5. 釘選插件後點開 popup
+6. 保持預設 `免 API` 直接使用，或改成你要的 provider 後儲存
 
 ---
 
@@ -54,96 +79,47 @@ A high-performance Chrome extension for **real-time Twitch chat translation** in
 
 ---
 
-## Quick Start
+## Runtime Behavior
 
-1. Open Chrome: `chrome://extensions`
-2. Enable **Developer mode**
-3. Click **Load unpacked**
-4. Select this folder:
-   `/home/zxc30302207/code/codex-workspace/TWITCH`
-5. Pin extension and open popup
-6. Keep default `免 API` mode, or switch provider and save credentials
-
----
-
-## Usage
-
-- Supported domains:
-  - `twitch.tv`
-  - `www.twitch.tv`
-  - `m.twitch.tv`
-- Translations are appended under each chat line in real time
-- Messages are skipped if they are command-like, too short, or non-translatable noise
-
----
-
-## In-Popup Advanced Settings
-
-All advanced settings are available directly in the extension popup:
-
-- Provider
-- API Key
-- API URL
-- Model
-- Temperature
-- Translation style
-- Minimum message length
-
-No external settings page is required during normal use.
+- 支援網域：`twitch.tv`、`www.twitch.tv`、`m.twitch.tv`
+- 每則可翻譯訊息會在原文下方插入翻譯
+- 指令型訊息、過短訊息、雜訊會自動略過
+- 需要金鑰的 provider 未填 key 時，會回退到 `google_free`
 
 ---
 
 ## Architecture
 
-- `manifest.json`
-  - Extension manifest, permissions, content-script injection, background worker
-- `background.js`
-  - Provider routing, API requests, queue processing, cache, fallback behavior
-- `content.js`
-  - Twitch DOM observation and translated text injection into chat lines
-- `popup.html` / `popup.css` / `popup.js`
-  - Runtime controls and full advanced configuration UI
-- `options.*`
-  - Legacy/extended settings entry (still retained in project)
+| File | Responsibility |
+| --- | --- |
+| `manifest.json` | Manifest、權限、content script、background worker |
+| `content.js` | 監看 Twitch 聊天 DOM，抽取訊息並插入翻譯 |
+| `background.js` | Provider 路由、API 呼叫、排程、快取、錯誤回退 |
+| `popup.html` / `popup.css` / `popup.js` | 插件 UI、即時開關、進階設定與儲存 |
+| `options.*` | Legacy 設定頁（目前仍保留） |
 
 ---
 
 ## Performance Design
 
-To stay responsive in high-volume chats:
-
-- Concurrent request workers (`MAX_CONCURRENT_REQUESTS`)
-- In-flight dedupe for same message/provider key
-- Queue trimming when incoming rate exceeds backlog threshold
-- Cache reuse for repeated text
-
-These controls are implemented in `background.js`.
+- Concurrent workers（`MAX_CONCURRENT_REQUESTS`）
+- In-flight dedupe（相同訊息/供應商鍵值只送一次）
+- Queue trimming（爆量時優先新訊息）
+- Translation cache（重複訊息直接命中）
 
 ---
 
-## Privacy & Security Notes
+## Security Notes
 
-- API keys are stored in extension storage (`chrome.storage.sync`)
-- Requests are sent only to configured/allowed provider domains
-- If a key-required provider has no key, translator falls back to `google_free`
-
-For production publishing, consider migrating secrets to a safer token flow (server-issued short-lived tokens).
+- API keys 儲存在 `chrome.storage.sync`
+- 只對已授權 provider domain 發送請求
+- 若要正式商用，建議改為後端簽發短時 token，避免長期密鑰直接留在客戶端
 
 ---
 
-## Development Notes
+## Roadmap
 
-- Manifest version: `v3`
-- Tested workflow: unpacked extension in Chrome
-- Main runtime paths:
-  - Content script on Twitch pages
-  - Background service worker for translation orchestration
-
----
-
-## Roadmap Ideas
-
-- Channel-level translation rules (whitelist/blacklist)
-- Per-language routing strategy
-- Better emote/context-aware slang adaptation
-- Optional local-only translation pipeline
+- 頻道級翻譯規則（白名單/黑名單）
+- 語言偵測後路由（不同語種走不同 provider）
+- 更完整的梗圖/俚語/表情語境處理
+- 本地模型優先策略（offline-first）

@@ -1,0 +1,47 @@
+<svg width="1280" height="520" viewBox="0 0 1280 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1280" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0B1220"/>
+      <stop offset="1" stop-color="#152038"/>
+    </linearGradient>
+    <linearGradient id="line" x1="140" y1="260" x2="1140" y2="260" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2AA198"/>
+      <stop offset="1" stop-color="#4F9BFF"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1280" height="520" rx="24" fill="url(#bg)"/>
+
+  <text x="44" y="62" fill="#EAF1FB" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="34" font-weight="700">Runtime Flow</text>
+  <text x="44" y="94" fill="#AFC5DF" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="18">Twitch Chat -> Content Script -> Background Router -> Provider -> Render Translation</text>
+
+  <line x1="130" y1="260" x2="1150" y2="260" stroke="url(#line)" stroke-width="4" stroke-linecap="round"/>
+
+  <rect x="70" y="200" width="200" height="120" rx="16" fill="#0E1628" stroke="#2A3B5E"/>
+  <text x="96" y="244" fill="#EAF1FB" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="20" font-weight="600">Twitch DOM</text>
+  <text x="96" y="272" fill="#9FB3CD" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="16">Incoming chat lines</text>
+
+  <rect x="310" y="200" width="230" height="120" rx="16" fill="#0E1628" stroke="#2A3B5E"/>
+  <text x="338" y="244" fill="#EAF1FB" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="20" font-weight="600">content.js</text>
+  <text x="338" y="272" fill="#9FB3CD" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="16">Observe + extract text</text>
+
+  <rect x="580" y="180" width="260" height="160" rx="16" fill="#0E1628" stroke="#2A3B5E"/>
+  <text x="612" y="226" fill="#EAF1FB" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="20" font-weight="600">background.js</text>
+  <text x="612" y="254" fill="#9FB3CD" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="16">Provider routing</text>
+  <text x="612" y="280" fill="#9FB3CD" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="16">Queue + dedupe + cache</text>
+  <text x="612" y="306" fill="#9FB3CD" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="16">Fallback handling</text>
+
+  <rect x="880" y="170" width="330" height="180" rx="16" fill="#0E1628" stroke="#2A3B5E"/>
+  <text x="910" y="216" fill="#EAF1FB" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="20" font-weight="600">Translation Providers</text>
+  <text x="910" y="245" fill="#9FB3CD" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="16">google_free / OpenAI / OpenRouter</text>
+  <text x="910" y="270" fill="#9FB3CD" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="16">Groq / DeepSeek / Gemini</text>
+  <text x="910" y="295" fill="#9FB3CD" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="16">Anthropic / Ollama</text>
+
+  <circle cx="130" cy="260" r="7" fill="#2AA198"/>
+  <circle cx="310" cy="260" r="7" fill="#2AA198"/>
+  <circle cx="580" cy="260" r="7" fill="#2AA198"/>
+  <circle cx="880" cy="260" r="7" fill="#4F9BFF"/>
+  <circle cx="1150" cy="260" r="7" fill="#4F9BFF"/>
+
+  <text x="44" y="474" fill="#87B1D6" font-family="Segoe UI, Inter, Arial, sans-serif" font-size="16">Rendered translation is appended under the original Twitch chat message.</text>
+</svg>
